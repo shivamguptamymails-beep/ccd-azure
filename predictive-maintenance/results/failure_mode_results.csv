@@ -1,0 +1,6 @@
+mode,name,train_cases,test_cases,precision,recall,pr_auc,random_baseline_pr_auc
+TWF,Tool wear failure,36,10,0.125,0.1,0.07276053081208766,0.005
+HDF,Heat dissipation failure,86,29,0.9354838709677419,1.0,0.9343954745202107,0.0145
+PWF,Power failure,82,13,1.0,1.0,0.9999999999999998,0.0065
+OSF,Overstrain failure,82,16,0.9411764705882353,1.0,1.0,0.008
+RNF,Random failure,15,4,0.0,0.0,0.03922684852835606,0.002

@@ -1,0 +1,25 @@
+pandas==3.0.6
+numpy==2.5.3
+scikit-learn==1.9.1
+xgboost==3.4.1
+imbalanced-learn==0.14.2
+joblib==1.6.0
+matplotlib==3.11.2
+shap==0.52.0
+streamlit==1.65.0
+altair==6.3.0
+
+# --- Serving / API (api/, tests/test_api.py) ---
+fastapi==0.118.0
+uvicorn[standard]==0.37.0
+pydantic==2.11.7
+httpx==0.28.1
+
+# --- Observability (optional: wired up only if APPLICATIONINSIGHTS_CONNECTION_STRING is set) ---
+azure-monitor-opentelemetry==1.6.8
+
+# --- Testing (tests/) ---
+pytest==8.4.2
+
+# --- Load testing (load_test/), for the live auto-scaling demo ---
+locust==2.41.9

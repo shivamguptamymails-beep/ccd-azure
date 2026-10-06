@@ -1,0 +1,179 @@
+name: CI/CD - Predictive Maintenance API
+
+# On every push: run unit + model-quality tests, build the Docker image,
+# push it to Azure Container Registry, then re-apply Terraform so the
+# Container App picks up the new image tag - only if every prior stage
+# passed. A failed post-deploy health check triggers an automatic rollback
+# to the previously deployed image tag.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      enable_api_management:
+        description: "Provision Azure API Management (slow, ~30min)"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write   # required for OIDC login to Azure (no stored secrets)
+  contents: read
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+  IMAGE_NAME: predictive-maintenance-api
+  TF_VAR_publisher_email: ${{ secrets.ALERT_EMAIL }}
+  TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+  TF_VAR_enable_api_management: ${{ github.event.inputs.enable_api_management || 'false' }}
+
+jobs:
+  test:
+    name: Unit + model-quality tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - run: pip install -r requirements.txt
+
+      # Gate 1: API contract (test_api.py) and the model's accuracy/recall
+      # floor on the held-out test set (test_model_quality.py). A retrained
+      # model that regresses below the documented baseline fails here and
+      # the pipeline stops - nothing below this job ever runs.
+      - run: pytest tests/ -v
+
+  build-and-push:
+    name: Build & push image to ACR
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.vars.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: vars
+        run: echo "image_tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR
+        run: az acr login --name "$(echo $ACR_LOGIN_SERVER | cut -d. -f1)"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.image_tag }}
+            ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Terraform apply (Azure Container Apps)
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      previous_image_tag: ${{ steps.previous.outputs.image_tag }}
+      fqdn: ${{ steps.apply.outputs.fqdn }}
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TFSTATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=predictive-maintenance.tfstate"
+        env:
+          ARM_USE_OIDC: "true"
+
+      # Captured BEFORE apply, so a failed smoke test later can roll back to
+      # exactly what was running before this deploy.
+      - id: previous
+        run: echo "image_tag=$(terraform output -raw current_image_tag 2>/dev/null || echo latest)" >> "$GITHUB_OUTPUT"
+        env:
+          ARM_USE_OIDC: "true"
+
+      - id: apply
+        run: |
+          terraform apply -auto-approve \
+            -var "image_tag=${{ needs.build-and-push.outputs.image_tag }}"
+          echo "fqdn=$(terraform output -raw container_app_fqdn)" >> "$GITHUB_OUTPUT"
+        env:
+          ARM_USE_OIDC: "true"
+
+  smoke-test:
+    name: Post-deploy health check
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the new revision to report healthy
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS "https://${{ needs.deploy.outputs.fqdn }}/ready"; then
+              echo "Healthy."
+              exit 0
+            fi
+            echo "Not ready yet, retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::API did not become healthy after deploy"
+          exit 1
+
+  rollback:
+    name: Roll back to previous image on failed health check
+    needs: [deploy, smoke-test]
+    if: failure() && needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+      - run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TFSTATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=predictive-maintenance.tfstate"
+          terraform apply -auto-approve \
+            -var "image_tag=${{ needs.deploy.outputs.previous_image_tag }}"
+        env:
+          ARM_USE_OIDC: "true"

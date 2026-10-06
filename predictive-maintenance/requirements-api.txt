@@ -1,0 +1,21 @@
+# Serving-only dependencies for the Docker image (see Dockerfile).
+#
+# Deliberately NOT here: xgboost (training-only, see train_models.py's lazy
+# import), imbalanced-learn/SMOTE (training-only), streamlit/altair (the
+# exploration dashboard in app.py, not the API), pytest/locust (dev/test
+# tooling). Keeping these out of the image avoids xgboost's multi-hundred-MB
+# nvidia-nccl GPU dependency chain and a few hundred more MB of unused libs
+# in what should be a small, fast-to-scale container.
+pandas==3.0.6
+numpy==2.5.3
+scikit-learn==1.9.1
+joblib==1.6.0
+matplotlib==3.11.2
+shap==0.52.0
+
+fastapi==0.118.0
+uvicorn[standard]==0.37.0
+pydantic==2.11.7
+
+# Optional: wired up only if APPLICATIONINSIGHTS_CONNECTION_STRING is set.
+azure-monitor-opentelemetry==1.6.8

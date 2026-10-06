@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (gitignored) and fill in, or pass via
+# -var-file in CI. Only publisher_email has no default and must be set.
+
+project_name    = "pmaint"
+environment     = "dev"
+location        = "centralindia"
+
+publisher_name  = "Predictive Maintenance Team"
+publisher_email = "you@example.com"
+alert_email     = "you@example.com"
+
+min_replicas                     = 1
+max_replicas                     = 10
+concurrent_requests_per_replica  = 20
+
+enable_api_management = false

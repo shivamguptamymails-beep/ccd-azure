@@ -1,0 +1,21 @@
+# Virtual environment (recreate with: pip install -r requirements.txt)
+venv/
+
+# Python cache files
+__pycache__/
+
+# Local editor/tool settings
+.claude/
+
+# Synopsis contains team names and registration numbers
+Predictive_Maintenance_Intelligence_System_Synopsis.docx
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfvars
+infra/crash.log
+
+# Load test output
+load_test/*.html

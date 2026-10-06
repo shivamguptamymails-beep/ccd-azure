@@ -1,0 +1,22 @@
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.git/
+.github/
+.claude/
+infra/
+load_test/
+tests/
+data/
+results/eda/
+results/explain/
+results/test_risk_predictions.csv
+app.py
+eda.py
+*.md
+.gitignore
+.dockerignore
+Dockerfile
+Predictive_Maintenance_Intelligence_System_Synopsis.docx
+"CCD_Miniproject_Synopsis_AutoScaleAI (2).docx"
