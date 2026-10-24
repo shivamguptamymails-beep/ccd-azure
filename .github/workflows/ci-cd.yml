@@ -22,11 +22,6 @@ on:
       - "predictive-maintenance/**"
       - ".github/workflows/ci-cd.yml"
   workflow_dispatch:
-    inputs:
-      enable_api_management:
-        description: "Provision Azure API Management (slow, ~30min)"
-        type: boolean
-        default: false
 
 permissions:
   id-token: write   # required for OIDC login to Azure (no stored secrets)
@@ -57,11 +52,13 @@ env:
   TF_VAR_location: eastasia
   TF_VAR_cosmos_location: koreacentral
   TF_VAR_min_replicas: "0"
-  TF_VAR_max_replicas: "3"
+  TF_VAR_max_replicas: "10"
+  TF_VAR_concurrent_requests_per_replica: "10"
   TF_VAR_model_version: v1
   TF_VAR_publisher_email: ${{ secrets.ALERT_EMAIL }}
   TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
-  TF_VAR_enable_api_management: ${{ github.event.inputs.enable_api_management || 'false' }}
+  TF_VAR_enable_api_management: "true"
+  TF_VAR_enable_functions: "true"
 
 jobs:
   test:
@@ -181,6 +178,18 @@ jobs:
             -var "frontend_image_tag=${{ needs.build-and-push.outputs.image_tag }}"
           echo "fqdn=$(terraform output -raw container_app_fqdn)" >> "$GITHUB_OUTPUT"
           echo "dashboard_url=$(terraform output -raw dashboard_url)" >> "$GITHUB_OUTPUT"
+          echo "function_app=$(terraform output -raw function_app_name)" >> "$GITHUB_OUTPUT"
+          echo "resource_group=$(terraform output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
+
+      # Function code ships as a zip; Azure installs requirements.txt (remote build).
+      - name: Deploy notifier Function
+        working-directory: ${{ env.PROJECT_DIR }}/functions
+        run: |
+          zip -r ../function.zip . -x ".venv/*" "__pycache__/*"
+          az functionapp deployment source config-zip \
+            -g "${{ steps.apply.outputs.resource_group }}" \
+            -n "${{ steps.apply.outputs.function_app }}" \
+            --src ../function.zip --build-remote true
 
   smoke-test:
     name: Post-deploy health check

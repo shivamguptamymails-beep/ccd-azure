@@ -139,6 +139,19 @@ def alert_rules() -> pd.DataFrame:
             "window": p.get("windowSize", ""),
             "description": p.get("description", ""),
         })
+    # Log (KQL) alerts: the API error rate and the Function's Critical events.
+    body = _arm_get(f"/subscriptions/{sub}/resourceGroups/{rg}/providers/"
+                    "Microsoft.Insights/scheduledQueryRules", "2023-03-15-preview")
+    for rule in body.get("value", []):
+        p = rule["properties"]
+        rows.append({
+            "rule": rule["name"],
+            "enabled": p.get("enabled"),
+            "severity": f"Sev {p.get('severity')}",
+            "condition": "log query (KQL) returns rows",
+            "window": p.get("windowSize", ""),
+            "description": p.get("description", ""),
+        })
     return pd.DataFrame(rows)
 
 

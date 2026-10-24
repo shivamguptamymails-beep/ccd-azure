@@ -1,0 +1,27 @@
+warm-up: 200 71.611428s
+         Aggregated                                                                       865  710(82.08%) |  59336      99  181155  55000 |    3.20        2.63
+
+Response time percentiles (approximated)
+Type     Name                                                                                  50%    66%    75%    80%    90%    95%    98%    99%  99.9% 99.99%   100% # reqs
+--------|--------------------------------------------------------------------------------|--------|------|------|------|------|------|------|------|------|------|------|------
+POST     /explain                                                                            16000  91000 116000 117000 135000 137000 139000 139000 140000 140000 140000    110
+GET      /health                                                                              3000  13000  29000  40000  91000 117000 122000 122000 122000 122000 122000    113
+POST     /predict                                                                            65000 117000 122000 122000 136000 141000 142000 143000 144000 144000 144000    534
+POST     /predict/batch                                                                      60000 117000 122000 122000 122000 137000 142000 144000 181000 181000 181000    108
+--------|--------------------------------------------------------------------------------|--------|------|------|------|------|------|------|------|------|------|------|------
+         Aggregated                                                                          55000 116000 117000 122000 122000 139000 142000 143000 181000 181000 181000    865
+
+Error report
+# occurrences      Error                                                                                               
+------------------|---------------------------------------------------------------------------------------------------------------------------------------------
+36                 GET /health: HTTPError('503 Server Error: Service Unavailable for url: /health')                    
+204                POST /predict: HTTPError('503 Server Error: Service Unavailable for url: /predict')                 
+45                 POST /predict/batch: HTTPError('503 Server Error: Service Unavailable for url: /predict/batch')     
+38                 POST /explain: HTTPError('503 Server Error: Service Unavailable for url: /explain')                 
+284                POST /predict: HTTPError('502 Server Error: Bad Gateway for url: /predict')                         
+37                 POST /explain: HTTPError('502 Server Error: Bad Gateway for url: /explain')                         
+53                 POST /predict/batch: HTTPError('502 Server Error: Bad Gateway for url: /predict/batch')             
+13                 GET /health: HTTPError('502 Server Error: Bad Gateway for url: /health')                            
+------------------|---------------------------------------------------------------------------------------------------------------------------------------------
+
+load finished at 21:41:52; watching scale-down...

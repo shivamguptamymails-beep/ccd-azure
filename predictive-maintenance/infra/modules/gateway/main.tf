@@ -54,6 +54,48 @@ resource "azurerm_api_management_api_operation" "predict_batch" {
   }
 }
 
+resource "azurerm_api_management_api_operation" "explain" {
+  operation_id        = "explain"
+  api_name            = azurerm_api_management_api.predictive_maintenance.name
+  api_management_name = azurerm_api_management.this.name
+  resource_group_name = var.resource_group_name
+  display_name        = "Explain one machine's score (SHAP)"
+  method              = "POST"
+  url_template        = "/explain"
+
+  response {
+    status_code = 200
+  }
+}
+
+resource "azurerm_api_management_api_operation" "ready" {
+  operation_id        = "ready"
+  api_name            = azurerm_api_management_api.predictive_maintenance.name
+  api_management_name = azurerm_api_management.this.name
+  resource_group_name = var.resource_group_name
+  display_name        = "Readiness and serving model version"
+  method              = "GET"
+  url_template        = "/ready"
+
+  response {
+    status_code = 200
+  }
+}
+
+resource "azurerm_api_management_api_operation" "metadata" {
+  operation_id        = "model-metadata"
+  api_name            = azurerm_api_management_api.predictive_maintenance.name
+  api_management_name = azurerm_api_management.this.name
+  resource_group_name = var.resource_group_name
+  display_name        = "Model thresholds and comparison"
+  method              = "GET"
+  url_template        = "/model/metadata"
+
+  response {
+    status_code = 200
+  }
+}
+
 resource "azurerm_api_management_product" "this" {
   product_id            = "predictive-maintenance"
   api_management_name   = azurerm_api_management.this.name
@@ -97,4 +139,14 @@ resource "azurerm_api_management_product_policy" "throttle" {
   </on-error>
 </policies>
 XML
+}
+
+# A key for demos and the smoke test. Real consumers would each get their
+# own subscription, so their calls are throttled and revocable separately.
+resource "azurerm_api_management_subscription" "demo" {
+  api_management_name = azurerm_api_management.this.name
+  resource_group_name = var.resource_group_name
+  product_id          = azurerm_api_management_product.this.id
+  display_name        = "Demo key"
+  state               = "active"
 }

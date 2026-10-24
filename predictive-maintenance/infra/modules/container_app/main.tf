@@ -109,15 +109,23 @@ resource "azurerm_container_app" "api" {
         failure_count_threshold = 10
       }
 
+      # Generous timeouts: a replica saturated by scoring is slow, not dead.
+      # The 1 s default restarted busy replicas mid-load-test (502s).
       liveness_probe {
-        transport = "HTTP"
-        path      = "/health"
-        port      = 8000
+        transport               = "HTTP"
+        path                    = "/health"
+        port                    = 8000
+        interval_seconds        = 10
+        timeout                 = 5
+        failure_count_threshold = 6
       }
       readiness_probe {
-        transport = "HTTP"
-        path      = "/ready"
-        port      = 8000
+        transport               = "HTTP"
+        path                    = "/ready"
+        port                    = 8000
+        interval_seconds        = 5
+        timeout                 = 5
+        failure_count_threshold = 3
       }
     }
 

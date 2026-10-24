@@ -26,6 +26,12 @@ output "api_gateway_url" {
   value       = var.enable_api_management ? module.gateway[0].api_path : null
 }
 
+output "api_gateway_demo_key" {
+  description = "Demo subscription key for the API Management gateway (Ocp-Apim-Subscription-Key header)."
+  value       = var.enable_api_management ? module.gateway[0].demo_subscription_key : null
+  sensitive   = true
+}
+
 output "key_vault_uri" {
   value = module.keyvault.key_vault_uri
 }
@@ -46,4 +52,9 @@ output "app_insights_connection_string" {
 output "dashboard_url" {
   description = "Public URL of the Streamlit dashboard."
   value       = var.enable_frontend ? "https://${module.frontend[0].fqdn}" : null
+}
+
+output "function_app_name" {
+  description = "Notifier Function App; CI zip-deploys functions/ to it."
+  value       = var.enable_functions ? module.functions[0].function_app_name : null
 }

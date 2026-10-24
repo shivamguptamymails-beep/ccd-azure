@@ -161,13 +161,16 @@ def root():
     return RedirectResponse("/docs")
 
 
+# Probe endpoints are async so they answer from the event loop: sync handlers
+# (the CPU-heavy scoring below) run in a thread pool, and under load a probe
+# queued behind them would time out and get a healthy replica restarted.
 @app.get("/health", tags=["ops"])
-def health():
+async def health():
     return {"status": "ok"}
 
 
 @app.get("/ready", tags=["ops"])
-def ready():
+async def ready():
     if "final" not in _state:
         raise HTTPException(status_code=503, detail="Models not loaded")
     return {"status": "ready", "model_version": MODEL_VERSION,

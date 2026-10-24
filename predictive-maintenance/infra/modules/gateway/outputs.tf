@@ -5,3 +5,8 @@ output "gateway_url" {
 output "api_path" {
   value = "${azurerm_api_management.this.gateway_url}/${azurerm_api_management_api.predictive_maintenance.path}"
 }
+
+output "demo_subscription_key" {
+  value     = azurerm_api_management_subscription.demo.primary_key
+  sensitive = true
+}

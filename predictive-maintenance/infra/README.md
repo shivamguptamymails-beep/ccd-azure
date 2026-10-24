@@ -162,3 +162,37 @@ Every `/predict` and `/predict/batch` result is written to Cosmos DB as a
 background task (no added latency); `GET /history` returns the newest entries.
 Pass `?log=false` to `/predict/batch` for hypothetical sweeps you don't want
 logged.
+
+## API gateway (API Management)
+
+`enable_api_management = true` puts Azure API Management (Consumption tier)
+in front of the API at `terraform output api_gateway_url`. Every call needs a
+subscription key, and each key is limited to 60 calls a minute and 5,000 a
+week. A demo key is created for testing:
+
+```bash
+KEY=$(terraform output -raw api_gateway_demo_key)
+curl -H "Ocp-Apim-Subscription-Key: $KEY" "$(terraform output -raw api_gateway_url)/ready"
+```
+
+No key returns 401; over the limit returns 429. CI keeps the gateway on
+(`TF_VAR_enable_api_management: "true"`): turning the flag off in one place
+but not the other would destroy it on the next apply.
+
+## Serverless notifier (Azure Function)
+
+`functions/` holds a Python Azure Function triggered by the Cosmos DB change
+feed of `prediction-logs`. For every Critical prediction it logs a
+`CRITICAL_PREDICTION` event to Application Insights, and the
+`critical-prediction` log alert emails the action group (at most one email
+per 5-minute window). Terraform creates the Function App; the code ships as a
+zip, which CI deploys after `terraform apply`. By hand:
+
+```bash
+cd ../functions && zip -r ../function.zip . && cd ../infra
+az functionapp deployment source config-zip -g rg-pmaint-dev \
+  -n "$(terraform output -raw function_app_name)" --src ../function.zip --build-remote true
+```
+
+The Function resolves its Cosmos DB and App Insights connection strings from
+Key Vault through the shared managed identity.

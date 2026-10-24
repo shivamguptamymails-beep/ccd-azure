@@ -141,3 +141,20 @@ module "frontend" {
   log_analytics_workspace_customer_id = module.core.log_analytics_workspace_customer_id
   tags                                = var.tags
 }
+
+module "functions" {
+  count  = var.enable_functions ? 1 : 0
+  source = "./modules/functions"
+
+  project_name               = var.project_name
+  environment                = var.environment
+  location                   = module.core.resource_group_location
+  resource_group_name        = module.core.resource_group_name
+  suffix                     = module.core.suffix
+  identity_id                = module.identity.identity_id
+  cosmos_secret_id           = module.keyvault.cosmos_secret_id
+  app_insights_secret_id     = module.keyvault.app_insights_secret_id
+  log_analytics_workspace_id = module.core.log_analytics_workspace_id
+  action_group_id            = module.monitoring.action_group_id
+  tags                       = var.tags
+}

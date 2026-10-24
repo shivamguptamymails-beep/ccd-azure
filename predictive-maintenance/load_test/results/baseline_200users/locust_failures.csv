@@ -1,0 +1,9 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,/health,HTTPError('503 Server Error: Service Unavailable for url: /health'),36,2026-10-23T21:37:18Z,2026-10-23T21:39:48Z
+POST,/explain,HTTPError('503 Server Error: Service Unavailable for url: /explain'),38,2026-10-23T21:37:18Z,2026-10-23T21:39:47Z
+GET,/health,HTTPError('502 Server Error: Bad Gateway for url: /health'),13,2026-10-23T21:39:16Z,2026-10-23T21:41:19Z
+POST,/predict,HTTPError('503 Server Error: Service Unavailable for url: /predict'),204,2026-10-23T21:37:18Z,2026-10-23T21:39:48Z
+POST,/predict/batch,HTTPError('503 Server Error: Service Unavailable for url: /predict/batch'),45,2026-10-23T21:37:18Z,2026-10-23T21:39:48Z
+POST,/predict,HTTPError('502 Server Error: Bad Gateway for url: /predict'),284,2026-10-23T21:39:16Z,2026-10-23T21:41:19Z
+POST,/predict/batch,HTTPError('502 Server Error: Bad Gateway for url: /predict/batch'),53,2026-10-23T21:39:16Z,2026-10-23T21:41:19Z
+POST,/explain,HTTPError('502 Server Error: Bad Gateway for url: /explain'),37,2026-10-23T21:39:16Z,2026-10-23T21:41:19Z

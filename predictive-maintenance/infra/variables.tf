@@ -111,3 +111,9 @@ variable "frontend_image_tag" {
   type        = string
   default     = "bootstrap"
 }
+
+variable "enable_functions" {
+  description = "Deploy the serverless Critical-prediction notifier (Azure Function on the Cosmos DB change feed)."
+  type        = bool
+  default     = true
+}
