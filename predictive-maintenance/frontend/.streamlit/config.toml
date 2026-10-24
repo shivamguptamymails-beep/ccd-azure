@@ -1,0 +1,23 @@
+# Defining both [theme.light] and [theme.dark] lets viewers pick Light, Dark
+# or "Use system setting" under ⋮ → Settings; ui.py matches its custom CSS.
+[theme]
+font = "sans serif"
+
+[theme.light]
+primaryColor = "#4f46e5"
+backgroundColor = "#f8fafc"
+secondaryBackgroundColor = "#eef2ff"
+textColor = "#0f172a"
+
+[theme.dark]
+primaryColor = "#818cf8"
+backgroundColor = "#0b1020"
+secondaryBackgroundColor = "#1a2238"
+textColor = "#e2e8f0"
+
+[server]
+headless = true
+maxUploadSize = 20
+
+[browser]
+gatherUsageStats = false

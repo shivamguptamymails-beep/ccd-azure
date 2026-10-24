@@ -64,3 +64,46 @@ resource "azurerm_monitor_metric_alert" "restart_spike" {
 
   tags = var.tags
 }
+
+# Fires when the API's server-error rate crosses error_rate_threshold_percent.
+# A rate needs request counts, which Container Apps metrics can't divide, so
+# this is a log alert over the Application Insights requests table (the API
+# is instrumented with OpenTelemetry; probe paths are excluded there). The
+# minimum-volume guard stops one failed request on an idle API from paging.
+resource "azurerm_monitor_scheduled_query_rules_alert_v2" "error_rate" {
+  name                 = "alert-${var.project_name}-${var.environment}-error-rate"
+  resource_group_name  = var.resource_group_name
+  location             = var.location
+  scopes               = [var.log_analytics_workspace_id]
+  description          = "API 5xx rate above ${var.error_rate_threshold_percent}% over 15 minutes (min ${var.error_rate_min_requests} requests)."
+  severity             = 1
+  evaluation_frequency = "PT5M"
+  window_duration      = "PT15M"
+
+  criteria {
+    query                   = <<-KQL
+      AppRequests
+      | where AppRoleName == "${var.api_role_name}"
+      | summarize total = count(), failed = countif(toint(ResultCode) >= 500)
+      | where total >= ${var.error_rate_min_requests}
+      | extend failure_pct = round(100.0 * failed / total, 2)
+      | where failure_pct > ${var.error_rate_threshold_percent}
+    KQL
+    time_aggregation_method = "Count"
+    operator                = "GreaterThan"
+    threshold               = 0
+
+    failing_periods {
+      minimum_failing_periods_to_trigger_alert = 1
+      number_of_evaluation_periods             = 1
+    }
+  }
+
+  auto_mitigation_enabled = true
+
+  action {
+    action_groups = [azurerm_monitor_action_group.this.id]
+  }
+
+  tags = var.tags
+}

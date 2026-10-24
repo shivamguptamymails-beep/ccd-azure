@@ -19,3 +19,9 @@ pydantic==2.11.7
 
 # Optional: wired up only if APPLICATIONINSIGHTS_CONNECTION_STRING is set.
 azure-monitor-opentelemetry==1.6.8
+
+# Optional Azure integrations (api/cloud.py): Blob Storage model registry and
+# Cosmos DB prediction log. Imported lazily, inactive unless configured.
+azure-identity==1.26.0
+azure-storage-blob==12.31.0
+azure-cosmos==4.17.1

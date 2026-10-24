@@ -9,3 +9,7 @@ output "fqdn" {
 output "name" {
   value = azurerm_container_app.api.name
 }
+
+output "environment_id" {
+  value = azurerm_container_app_environment.this.id
+}

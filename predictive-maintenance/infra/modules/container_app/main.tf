@@ -4,13 +4,38 @@ resource "azurerm_container_app_environment" "this" {
   location                   = var.location
   log_analytics_workspace_id = var.log_analytics_workspace_id
   tags                       = var.tags
+
+  workload_profile {
+    name                  = "Consumption"
+    workload_profile_type = "Consumption"
+  }
+}
+
+# AzureRM 3.x does not expose the explicit environment mode used by newer APIs.
+resource "azapi_update_resource" "environment_mode" {
+  type        = "Microsoft.App/managedEnvironments@2026-07-01"
+  resource_id = azurerm_container_app_environment.this.id
+  body = {
+    properties = {
+      environmentMode = "WorkloadProfiles"
+      appLogsConfiguration = {
+        destination = "log-analytics"
+        logAnalyticsConfiguration = {
+          customerId = var.log_analytics_workspace_customer_id
+          sharedKey  = var.log_analytics_workspace_shared_key
+        }
+      }
+    }
+  }
 }
 
 resource "azurerm_container_app" "api" {
+  depends_on                   = [azapi_update_resource.environment_mode]
   name                         = "ca-${var.project_name}-${var.environment}"
   container_app_environment_id = azurerm_container_app_environment.this.id
   resource_group_name          = var.resource_group_name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
   tags                         = var.tags
 
   identity {
@@ -29,6 +54,12 @@ resource "azurerm_container_app" "api" {
     key_vault_secret_id = var.app_insights_secret_id
   }
 
+  secret {
+    name                = "cosmos-connection-string"
+    identity            = var.identity_id
+    key_vault_secret_id = var.cosmos_secret_id
+  }
+
   template {
     min_replicas = var.min_replicas
     max_replicas = var.max_replicas
@@ -44,8 +75,38 @@ resource "azurerm_container_app" "api" {
         secret_name = "appinsights-connection-string"
       }
       env {
-        name  = "MODEL_VERSION"
+        name  = "OTEL_SERVICE_NAME"
+        value = "pmaint-api"
+      }
+      env {
+        name  = "IMAGE_TAG"
         value = var.image_tag
+      }
+      env {
+        name  = "MODEL_VERSION"
+        value = var.model_version
+      }
+      env {
+        name  = "MODEL_STORAGE_ACCOUNT"
+        value = var.model_storage_account
+      }
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = var.identity_client_id
+      }
+      env {
+        name        = "COSMOS_CONNECTION_STRING"
+        secret_name = "cosmos-connection-string"
+      }
+
+      # Model imports and loading need extra time on fractional CPU replicas.
+      startup_probe {
+        transport               = "HTTP"
+        path                    = "/ready"
+        port                    = 8000
+        interval_seconds        = 30
+        timeout                 = 5
+        failure_count_threshold = 10
       }
 
       liveness_probe {

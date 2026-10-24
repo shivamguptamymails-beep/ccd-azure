@@ -11,6 +11,11 @@ output "current_image_tag" {
   value       = var.image_tag
 }
 
+output "current_frontend_image_tag" {
+  description = "Dashboard image tag this state was last applied with - CI's rollback target."
+  value       = var.frontend_image_tag
+}
+
 output "container_app_fqdn" {
   description = "Direct Container App URL (bypasses API Management even when it's enabled)."
   value       = module.container_app.fqdn
@@ -36,4 +41,9 @@ output "cosmos_endpoint" {
 output "app_insights_connection_string" {
   value     = module.core.app_insights_connection_string
   sensitive = true
+}
+
+output "dashboard_url" {
+  description = "Public URL of the Streamlit dashboard."
+  value       = var.enable_frontend ? "https://${module.frontend[0].fqdn}" : null
 }

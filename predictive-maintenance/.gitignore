@@ -16,6 +16,7 @@ infra/*.tfstate
 infra/*.tfstate.*
 infra/*.tfvars
 infra/crash.log
+infra/*.tfplan
 
 # Load test output
 load_test/*.html

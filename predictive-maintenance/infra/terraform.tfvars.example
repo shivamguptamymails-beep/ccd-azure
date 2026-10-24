@@ -4,6 +4,9 @@
 project_name    = "pmaint"
 environment     = "dev"
 location        = "centralindia"
+# Set location to a region allowed by your subscription. If Cosmos DB has
+# no capacity there, use a separate allowed region for that service:
+# cosmos_location = "koreacentral"
 
 publisher_name  = "Predictive Maintenance Team"
 publisher_email = "you@example.com"

@@ -20,10 +20,22 @@ variable "location" {
   default     = "centralindia"
 }
 
+variable "cosmos_location" {
+  description = "Optional Cosmos DB region override when the main region lacks capacity."
+  type        = string
+  default     = null
+}
+
 variable "image_tag" {
   description = "Tag of the predictive-maintenance-api image in ACR to deploy. The CI/CD pipeline passes the Git SHA here."
   type        = string
   default     = "latest"
+}
+
+variable "model_version" {
+  description = "Model version (blob prefix in the models container) the API serves. Upload a new version folder, then change this to roll it out without rebuilding the image."
+  type        = string
+  default     = "v1"
 }
 
 variable "min_replicas" {
@@ -86,4 +98,16 @@ variable "tags" {
     project = "predictive-maintenance"
     course  = "CCD-mini-project"
   }
+}
+
+variable "enable_frontend" {
+  description = "Deploy the Streamlit dashboard as a second Container App."
+  type        = bool
+  default     = true
+}
+
+variable "frontend_image_tag" {
+  description = "Tag of the predictive-maintenance-ui image in ACR."
+  type        = string
+  default     = "bootstrap"
 }

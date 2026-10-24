@@ -78,3 +78,10 @@ class ModelMetadata(BaseModel):
     thresholds: dict[str, float]
     raw_input_columns: list[str]
     model_comparison: list[dict]
+    model_version: str = "dev"
+    model_source: Literal["blob", "image"] = "image"
+
+
+class HistoryResponse(BaseModel):
+    enabled: bool = Field(description="False when no Cosmos DB connection is configured")
+    records: list[dict]

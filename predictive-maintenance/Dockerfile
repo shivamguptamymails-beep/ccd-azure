@@ -17,7 +17,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements-api.txt .
-RUN pip install --no-cache-dir -r requirements-api.txt
+RUN pip install --no-cache-dir --retries 10 --timeout 120 -r requirements-api.txt
 
 # Model code the saved .joblib pipelines need to import (FeatureEngineer,
 # make_pipeline, SHAP helpers) plus the API package itself.
@@ -36,4 +36,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl --fail http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

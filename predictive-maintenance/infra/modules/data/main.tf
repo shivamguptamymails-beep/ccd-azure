@@ -23,6 +23,14 @@ resource "azurerm_storage_container" "models" {
   container_access_type = "private"
 }
 
+# The API downloads its model version from here at startup, and the dashboard
+# lists the versions in the registry - both via the shared managed identity.
+resource "azurerm_role_assignment" "blob_reader" {
+  scope                = azurerm_storage_account.models.id
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = var.blob_reader_principal_id
+}
+
 # Prediction/request log store: every scored machine (inputs, probability,
 # risk level, likely cause) lands here for audit and future retraining data.
 # Serverless Cosmos DB = pay-per-request, nothing to provision/size upfront -
@@ -30,7 +38,7 @@ resource "azurerm_storage_container" "models" {
 resource "azurerm_cosmosdb_account" "this" {
   name                = "cosmos-${var.project_name}-${var.environment}-${var.suffix}"
   resource_group_name = var.resource_group_name
-  location            = var.location
+  location            = coalesce(var.cosmos_location, var.location)
   offer_type          = "Standard"
   kind                = "GlobalDocumentDB"
 
@@ -39,7 +47,7 @@ resource "azurerm_cosmosdb_account" "this" {
   }
 
   geo_location {
-    location          = var.location
+    location          = coalesce(var.cosmos_location, var.location)
     failover_priority = 0
   }
 

@@ -17,6 +17,13 @@ resource "azurerm_role_assignment" "deployer_secrets_officer" {
   scope                = azurerm_key_vault.this.id
   role_definition_name = "Key Vault Secrets Officer"
   principal_id         = data.azurerm_client_config.current.object_id
+
+  # Applies run as a person locally and as the CI identity in GitHub Actions.
+  # Without this, each switch would replace the assignment and lock the other
+  # one out; the CI identity gets its own grant from the OIDC setup script.
+  lifecycle {
+    ignore_changes = [principal_id]
+  }
 }
 
 # ...and the running Container App only needs read access at runtime.

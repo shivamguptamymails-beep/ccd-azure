@@ -18,18 +18,20 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from explain import make_explainer, readable_values, shap_for, transform_for_shap
 from failure_modes import MODE_NAMES, predict_modes
 from risk_levels import predict_risk
 
+from api.cloud import PredictionLog, download_models
 from api.schemas import (
     BatchPredictionRequest,
     BatchPredictionResponse,
     ExplanationResponse,
     FeatureContribution,
+    HistoryResponse,
     MachineReading,
     ModelMetadata,
     PredictionResult,
@@ -46,7 +48,10 @@ if os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"):
     from azure.monitor.opentelemetry import configure_azure_monitor
 
     configure_azure_monitor(logger_name="predictive_maintenance_api")
+    TELEMETRY = True
     logger.info("Azure Monitor OpenTelemetry instrumentation enabled")
+else:
+    TELEMETRY = False
 
 MODEL_DIR = Path(os.environ.get("MODEL_DIR", "models"))
 RESULTS_DIR = Path(os.environ.get("RESULTS_DIR", "results"))
@@ -55,13 +60,27 @@ MODEL_VERSION = os.environ.get("MODEL_VERSION", "dev")
 _state: dict = {}
 
 
+def _resolve_model_dir() -> tuple[Path, str]:
+    """Prefer the Blob Storage registry; fall back to the models baked into the image."""
+    blob_dir = Path("/tmp/models") / MODEL_VERSION
+    try:
+        if download_models(MODEL_VERSION, blob_dir):
+            return blob_dir, "blob"
+    except Exception:
+        logger.exception("Model download failed; using models baked into the image")
+    return MODEL_DIR, "image"
+
+
 def _load_models() -> None:
-    _state["final"] = joblib.load(MODEL_DIR / "final_model.joblib")
-    _state["thresholds"] = json.loads((MODEL_DIR / "risk_thresholds.json").read_text())
-    _state["modes"] = joblib.load(MODEL_DIR / "failure_mode_models.joblib")
-    _state["rf"] = joblib.load(MODEL_DIR / "random_forest.joblib")
+    model_dir, source = _resolve_model_dir()
+    _state["final"] = joblib.load(model_dir / "final_model.joblib")
+    _state["thresholds"] = json.loads((model_dir / "risk_thresholds.json").read_text())
+    _state["modes"] = joblib.load(model_dir / "failure_mode_models.joblib")
+    _state["rf"] = joblib.load(model_dir / "random_forest.joblib")
     _state["explainer"] = make_explainer(_state["rf"])
-    logger.info("Loaded models from %s (version=%s)", MODEL_DIR, MODEL_VERSION)
+    _state["model_dir"], _state["model_source"] = model_dir, source
+    _state["log"] = PredictionLog()
+    logger.info("Loaded models from %s (version=%s, source=%s)", model_dir, MODEL_VERSION, source)
 
 
 @asynccontextmanager
@@ -80,6 +99,15 @@ app = FastAPI(
     version=MODEL_VERSION,
     lifespan=lifespan,
 )
+
+
+# FastAPI was imported above before configure_azure_monitor() could patch the
+# class, so instrument this app explicitly or incoming requests never reach
+# Application Insights' requests table.
+if TELEMETRY:
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+    FastAPIInstrumentor.instrument_app(app, excluded_urls="health,ready")
 
 
 @app.middleware("http")
@@ -104,6 +132,15 @@ def _score(df: pd.DataFrame):
     return ranked, mode_probs
 
 
+def _log_records(results: list[PredictionResult], readings: list[MachineReading],
+                 endpoint: str) -> list[dict]:
+    return [
+        {**result.model_dump(exclude={"failure_mode_probabilities", "priority_rank"}),
+         "inputs": reading.to_raw_row(), "endpoint": endpoint, "model_version": MODEL_VERSION}
+        for result, reading in zip(results, readings)
+    ]
+
+
 def _to_result(machine_id: str, row: pd.Series, mode_row: pd.Series) -> PredictionResult:
     return PredictionResult(
         machine_id=machine_id,
@@ -119,6 +156,11 @@ def _to_result(machine_id: str, row: pd.Series, mode_row: pd.Series) -> Predicti
 # ---------------------------------------------------------------------------
 # Health / readiness (used by Container Apps probes and the load balancer)
 # ---------------------------------------------------------------------------
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse("/docs")
+
+
 @app.get("/health", tags=["ops"])
 def health():
     return {"status": "ok"}
@@ -128,12 +170,16 @@ def health():
 def ready():
     if "final" not in _state:
         raise HTTPException(status_code=503, detail="Models not loaded")
-    return {"status": "ready", "model_version": MODEL_VERSION}
+    return {"status": "ready", "model_version": MODEL_VERSION,
+            "model_source": _state["model_source"],
+            "prediction_logging": _state["log"].enabled}
 
 
 @app.get("/model/metadata", response_model=ModelMetadata, tags=["ops"])
 def model_metadata():
-    comparison_path = RESULTS_DIR / "model_comparison.csv"
+    comparison_path = _state["model_dir"] / "model_comparison.csv"
+    if not comparison_path.exists():
+        comparison_path = RESULTS_DIR / "model_comparison.csv"
     comparison = (
         pd.read_csv(comparison_path).round(4).to_dict(orient="records")
         if comparison_path.exists() else []
@@ -143,6 +189,8 @@ def model_metadata():
         thresholds=_state["thresholds"],
         raw_input_columns=RAW_COLUMNS,
         model_comparison=comparison,
+        model_version=MODEL_VERSION,
+        model_source=_state["model_source"],
     )
 
 
@@ -150,15 +198,18 @@ def model_metadata():
 # Inference
 # ---------------------------------------------------------------------------
 @app.post("/predict", response_model=PredictionResult, tags=["inference"])
-def predict(reading: MachineReading):
+def predict(reading: MachineReading, background: BackgroundTasks):
     df = _rows_to_frame([reading])
     ranked, mode_probs = _score(df)
     idx = ranked.index[0]
-    return _to_result(reading.machine_id or "M-0001", ranked.loc[idx], mode_probs.loc[idx])
+    result = _to_result(reading.machine_id or "M-0001", ranked.loc[idx], mode_probs.loc[idx])
+    background.add_task(_state["log"].write, _log_records([result], [reading], "predict"))
+    return result
 
 
 @app.post("/predict/batch", response_model=BatchPredictionResponse, tags=["inference"])
-def predict_batch(request: BatchPredictionRequest):
+def predict_batch(request: BatchPredictionRequest, background: BackgroundTasks,
+                  log: bool = Query(True, description="Write results to the prediction log")):
     if not request.readings:
         raise HTTPException(status_code=400, detail="readings must not be empty")
     df = _rows_to_frame(request.readings)
@@ -168,6 +219,9 @@ def predict_batch(request: BatchPredictionRequest):
         _to_result(ids[idx], ranked.loc[idx], mode_probs.loc[idx])
         for idx in ranked.index
     ]
+    if log:
+        background.add_task(_state["log"].write, _log_records(
+            results, [request.readings[idx] for idx in ranked.index], "predict/batch"))
     return BatchPredictionResponse(results=results)
 
 
@@ -190,6 +244,15 @@ def explain(reading: MachineReading):
     ]
     contributions.sort(key=lambda c: abs(c.contribution), reverse=True)
     return ExplanationResponse(machine_id=reading.machine_id or "M-0001", contributions=contributions)
+
+
+@app.get("/history", response_model=HistoryResponse, tags=["history"])
+def history(limit: int = Query(200, ge=1, le=1000), machine_id: str | None = None,
+            risk_level: str | None = None):
+    """Most recent logged predictions from Cosmos DB, newest first."""
+    log = _state["log"]
+    return HistoryResponse(enabled=log.enabled,
+                           records=log.recent(limit, machine_id, risk_level))
 
 
 @app.exception_handler(Exception)

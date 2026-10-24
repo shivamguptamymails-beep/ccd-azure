@@ -1,0 +1,10 @@
+streamlit>=1.50,<2
+requests>=2.32
+pandas>=2.2
+numpy>=1.26
+altair>=5.4
+azure-identity>=1.19
+# 2.x moved MetricsQueryClient into a separate package.
+azure-monitor-query>=1.4,<2
+azure-storage-blob>=12.20
+azure-monitor-opentelemetry>=1.6
